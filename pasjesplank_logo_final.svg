@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Subtle background circle from V2 -->
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#4A90E2" stroke-width="3" opacity="0.2"/>
+  <circle cx="200" cy="200" r="175" fill="none" stroke="#4A90E2" stroke-width="1" opacity="0.15"/>
+  
+  <!-- Background circle from V1 -->
+  <circle cx="200" cy="200" r="190" fill="#4A90E2" opacity="0.08"/>
+  
+  <!-- Shelf (plank) from V1 - breder gemaakt -->
+  <rect x="60" y="220" width="280" height="12" rx="6" fill="#8B4513"/>
+  <rect x="55" y="228" width="290" height="8" rx="4" fill="#A0522D" opacity="0.6"/>
+  
+  <!-- Cards on the shelf from V1 - alle op dezelfde hoogte -->
+  <!-- Card 1 - left -->
+  <rect x="75" y="160" width="55" height="65" rx="4" fill="#FF6B6B" stroke="#C44" stroke-width="2"/>
+  <rect x="80" y="168" width="45" height="3" rx="1.5" fill="white" opacity="0.7"/>
+  <rect x="80" y="175" width="35" height="2" rx="1" fill="white" opacity="0.5"/>
+  <circle cx="102.5" cy="195" r="8" fill="white" opacity="0.6"/>
+  
+  <!-- Card 2 - center-left -->
+  <rect x="140" y="160" width="55" height="65" rx="4" fill="#4ECDC4" stroke="#3AB" stroke-width="2"/>
+  <rect x="145" y="168" width="45" height="3" rx="1.5" fill="white" opacity="0.7"/>
+  <rect x="145" y="175" width="30" height="2" rx="1" fill="white" opacity="0.5"/>
+  <circle cx="167.5" cy="195" r="8" fill="white" opacity="0.6"/>
+  
+  <!-- Card 3 - center-right -->
+  <rect x="205" y="160" width="55" height="65" rx="4" fill="#95E1D3" stroke="#6CC" stroke-width="2"/>
+  <rect x="210" y="168" width="45" height="3" rx="1.5" fill="white" opacity="0.7"/>
+  <rect x="210" y="175" width="38" height="2" rx="1" fill="white" opacity="0.5"/>
+  <circle cx="232.5" cy="195" r="8" fill="white" opacity="0.6"/>
+  
+  <!-- Card 4 - right -->
+  <rect x="270" y="160" width="55" height="65" rx="4" fill="#FFE66D" stroke="#EED" stroke-width="2"/>
+  <rect x="275" y="168" width="45" height="3" rx="1.5" fill="#666" opacity="0.7"/>
+  <rect x="275" y="175" width="32" height="2" rx="1" fill="#666" opacity="0.5"/>
+  <circle cx="297.5" cy="195" r="8" fill="#666" opacity="0.4"/>
+  
+  <!-- Text - beide nu in dezelfde blauwe kleur met meer ruimte -->
+  <text x="200" y="275" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#4A90E2" text-anchor="middle">Maike's</text>
+  <text x="200" y="320" font-family="Arial, sans-serif" font-size="38" font-weight="bold" fill="#4A90E2" text-anchor="middle">PasjesPlank</text>
+</svg>
