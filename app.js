@@ -56,6 +56,7 @@ const closeScannerBtn = document.getElementById('closeScannerBtn');
 const filterBar = document.getElementById('filterBar');
 const categoryPicker = document.getElementById('categoryPicker');
 const detailCategory = document.getElementById('detailCategory');
+const detailColorPicker = document.getElementById('detailColorPicker');
 
 let selectedColor = '#6C63FF';
 let selectedCategory = 'overig';
@@ -86,6 +87,24 @@ function addCard(card) {
 function removeCard(id) {
   const cards = getCards().filter(c => c.id !== id);
   saveCards(cards);
+}
+
+function updateCardCategory(id, newCategory) {
+  const cards = getCards();
+  const card = cards.find(c => c.id === id);
+  if (card) {
+    card.category = newCategory;
+    saveCards(cards);
+  }
+}
+
+function updateCardColor(id, newColor) {
+  const cards = getCards();
+  const card = cards.find(c => c.id === id);
+  if (card) {
+    card.color = newColor;
+    saveCards(cards);
+  }
 }
 
 // ============================================================
@@ -139,10 +158,14 @@ function renderCards() {
 
   cardsGrid.innerHTML = html;
 
-  // Attach click handlers
+  // Attach click handlers (drag-aware)
   document.querySelectorAll('.loyalty-card').forEach(el => {
-    el.addEventListener('click', () => openDetail(el.dataset.id));
+    el.addEventListener('click', () => {
+      if (!dragState.didDrag) openDetail(el.dataset.id);
+    });
   });
+
+  initDrag();
 }
 
 function renderCardHtml(card, cat) {
@@ -273,6 +296,11 @@ function openDetail(id) {
   const cardCat = CATEGORIES[card.category || 'overig'];
   detailCategory.textContent = cardCat.emoji + ' ' + cardCat.label;
 
+  // Highlight current color in detail color picker
+  detailColorPicker.querySelectorAll('.color-option').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.color === card.color);
+  });
+
   // Render barcode
   try {
     JsBarcode(detailBarcode, card.barcodeNumber, {
@@ -308,6 +336,19 @@ function closeDetailModalFn() {
 closeDetailModal.addEventListener('click', closeDetailModalFn);
 detailModal.addEventListener('click', (e) => {
   if (e.target === detailModal) closeDetailModalFn();
+});
+
+// Detail color picker
+detailColorPicker.addEventListener('click', (e) => {
+  const btn = e.target.closest('.color-option');
+  if (!btn || !currentDetailId) return;
+  const newColor = btn.dataset.color;
+  updateCardColor(currentDetailId, newColor);
+  detailColorPicker.querySelectorAll('.color-option').forEach(b => {
+    b.classList.toggle('selected', b === btn);
+  });
+  renderCards();
+  showToast('Kleur aangepast!');
 });
 
 deleteCardBtn.addEventListener('click', () => {
@@ -388,6 +429,173 @@ function closeScanner() {
 
 scanBtn.addEventListener('click', openScanner);
 closeScannerBtn.addEventListener('click', closeScanner);
+
+// ============================================================
+// Drag & Drop (long-press to change category)
+// ============================================================
+
+const dragState = {
+  active: false,
+  didDrag: false,
+  cardId: null,
+  clone: null,
+  originEl: null,
+  timer: null,
+  startX: 0,
+  startY: 0
+};
+
+function initDrag() {
+  document.querySelectorAll('.loyalty-card').forEach(el => {
+    el.addEventListener('touchstart', onDragStart, { passive: false });
+    el.addEventListener('mousedown', onDragStart);
+  });
+}
+
+function getPos(e) {
+  if (e.touches && e.touches.length > 0) {
+    return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  return { x: e.clientX, y: e.clientY };
+}
+
+function onDragStart(e) {
+  const card = e.target.closest('.loyalty-card');
+  if (!card) return;
+
+  const pos = getPos(e);
+  dragState.startX = pos.x;
+  dragState.startY = pos.y;
+  dragState.didDrag = false;
+  dragState.cardId = card.dataset.id;
+  dragState.originEl = card;
+
+  dragState.timer = setTimeout(() => {
+    startDrag(card, pos);
+  }, 500);
+
+  document.addEventListener('touchmove', onDragMove, { passive: false });
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('touchend', onDragEnd);
+  document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchcancel', onDragEnd);
+}
+
+function startDrag(card, pos) {
+  dragState.active = true;
+  dragState.didDrag = true;
+
+  // Haptic feedback
+  if (navigator.vibrate) navigator.vibrate(50);
+
+  // Mark original as dragging
+  card.classList.add('dragging');
+
+  // Create visual clone
+  const rect = card.getBoundingClientRect();
+  const clone = card.cloneNode(true);
+  clone.className = 'loyalty-card drag-clone';
+  clone.style.width = rect.width + 'px';
+  clone.style.left = rect.left + 'px';
+  clone.style.top = rect.top + 'px';
+  document.body.appendChild(clone);
+  dragState.clone = clone;
+
+  // Prevent scrolling
+  document.body.classList.add('drag-active');
+}
+
+function onDragMove(e) {
+  const pos = getPos(e);
+
+  // Cancel long-press if moved too much before activation
+  if (!dragState.active && dragState.timer) {
+    const dx = Math.abs(pos.x - dragState.startX);
+    const dy = Math.abs(pos.y - dragState.startY);
+    if (dx > 10 || dy > 10) {
+      cancelDrag();
+      return;
+    }
+  }
+
+  if (!dragState.active) return;
+  e.preventDefault();
+
+  // Move clone
+  const dx = pos.x - dragState.startX;
+  const dy = pos.y - dragState.startY;
+  dragState.clone.style.transform = `translate(${dx}px, ${dy}px) scale(1.05)`;
+
+  // Highlight filter chip under pointer
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    const r = chip.getBoundingClientRect();
+    const over = pos.x >= r.left && pos.x <= r.right && pos.y >= r.top && pos.y <= r.bottom;
+    chip.classList.toggle('drop-hover', over && chip.dataset.filter !== 'all');
+  });
+}
+
+function onDragEnd(e) {
+  // Clean up listeners
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('touchend', onDragEnd);
+  document.removeEventListener('mouseup', onDragEnd);
+  document.removeEventListener('touchcancel', onDragEnd);
+
+  if (dragState.timer) {
+    clearTimeout(dragState.timer);
+    dragState.timer = null;
+  }
+
+  if (!dragState.active) return;
+
+  // Find drop target
+  const pos = e.changedTouches ? {
+    x: e.changedTouches[0].clientX,
+    y: e.changedTouches[0].clientY
+  } : { x: e.clientX, y: e.clientY };
+
+  let droppedCategory = null;
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    const r = chip.getBoundingClientRect();
+    if (pos.x >= r.left && pos.x <= r.right && pos.y >= r.top && pos.y <= r.bottom) {
+      if (chip.dataset.filter !== 'all') {
+        droppedCategory = chip.dataset.filter;
+      }
+    }
+  });
+
+  // Apply category change
+  if (droppedCategory && dragState.cardId) {
+    updateCardCategory(dragState.cardId, droppedCategory);
+    const cat = CATEGORIES[droppedCategory];
+    showToast(`Verplaatst naar ${cat.emoji} ${cat.label}`);
+    renderCards();
+  }
+
+  // Clean up visuals
+  if (dragState.clone) dragState.clone.remove();
+  if (dragState.originEl) dragState.originEl.classList.remove('dragging');
+  document.querySelectorAll('.filter-chip.drop-hover').forEach(c => c.classList.remove('drop-hover'));
+  document.body.classList.remove('drag-active');
+
+  dragState.active = false;
+  dragState.clone = null;
+  dragState.originEl = null;
+  dragState.cardId = null;
+}
+
+function cancelDrag() {
+  if (dragState.timer) {
+    clearTimeout(dragState.timer);
+    dragState.timer = null;
+  }
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('touchend', onDragEnd);
+  document.removeEventListener('mouseup', onDragEnd);
+  document.removeEventListener('touchcancel', onDragEnd);
+}
 
 // ============================================================
 // Toast

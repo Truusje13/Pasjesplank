@@ -145,6 +145,14 @@ body {
   transform: scale(0.95);
 }
 
+.filter-chip.drop-hover {
+  background: var(--accent-teal);
+  border-color: var(--accent-teal);
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(78, 205, 196, 0.5);
+}
+
 /* Category picker (form) */
 .category-picker {
   display: grid;
@@ -289,6 +297,28 @@ body {
 
 .loyalty-card:active {
   transform: scale(0.98);
+}
+
+.loyalty-card.dragging {
+  opacity: 0.35;
+  transform: scale(0.95);
+}
+
+.drag-clone {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: none;
+}
+
+body.drag-active {
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .card-color-bar {
