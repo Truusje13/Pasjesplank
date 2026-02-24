@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasjesplank-v8';
+const CACHE_NAME = 'pasjesplank-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -28,9 +28,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: cache-first strategy
+// Fetch: network-first for own files, cache-first for CDN
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // CDN resources (libraries) → cache-first (they don't change)
+  if (url.origin !== self.location.origin) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request))
+    );
+    return;
+  }
+
+  // Own files → network-first (so updates arrive immediately)
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        // Update cache with fresh version
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request)) // Offline fallback
   );
 });

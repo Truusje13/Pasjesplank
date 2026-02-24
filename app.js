@@ -846,9 +846,28 @@ function showToast(message) {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {
-      // SW registration failed - app still works without it
-    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        // Check for updates every time the app opens
+        reg.update();
+
+        // When a new SW is found, auto-activate and reload
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                // New version active — reload to show updates
+                showToast('Update beschikbaar, app wordt herladen...');
+                setTimeout(() => window.location.reload(), 1000);
+              }
+            });
+          }
+        });
+      })
+      .catch(() => {
+        // SW registration failed - app still works without it
+      });
   });
 }
 
