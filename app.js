@@ -158,6 +158,11 @@ const detailColorPicker = document.getElementById('detailColorPicker');
 const detailStoreLogo = document.getElementById('detailStoreLogo');
 const editNameBtn = document.getElementById('editNameBtn');
 const editNameInput = document.getElementById('editNameInput');
+const menuBtn = document.getElementById('menuBtn');
+const headerDropdown = document.getElementById('headerDropdown');
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const importFileInput = document.getElementById('importFileInput');
 
 let selectedColor = '#6C63FF';
 let selectedCategory = 'overig';
@@ -839,6 +844,131 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 300);
   }, 2500);
 }
+
+// ============================================================
+// Export / Import
+// ============================================================
+
+// Toggle dropdown menu
+menuBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  headerDropdown.classList.toggle('hidden');
+});
+
+// Close dropdown when clicking elsewhere
+document.addEventListener('click', () => {
+  headerDropdown.classList.add('hidden');
+});
+
+// Export cards as JSON file
+exportBtn.addEventListener('click', () => {
+  headerDropdown.classList.add('hidden');
+  const cards = getCards();
+  if (cards.length === 0) {
+    showToast('Geen kaarten om te exporteren');
+    return;
+  }
+
+  const data = {
+    app: 'PasjesPlank',
+    version: 1,
+    exportDate: new Date().toISOString(),
+    cards: cards
+  };
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'pasjesplank-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`${cards.length} kaart(en) geëxporteerd!`);
+});
+
+// Import: open file picker
+importBtn.addEventListener('click', () => {
+  headerDropdown.classList.add('hidden');
+  importFileInput.click();
+});
+
+// Import: handle selected file
+importFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+
+      // Validate format
+      if (!data.cards || !Array.isArray(data.cards)) {
+        showToast('Ongeldig backupbestand');
+        return;
+      }
+
+      // Validate each card has required fields
+      const validCards = data.cards.filter(c =>
+        c.storeName && c.barcodeNumber && c.color
+      );
+
+      if (validCards.length === 0) {
+        showToast('Geen geldige kaarten gevonden');
+        return;
+      }
+
+      // Ask user: merge or replace?
+      const existing = getCards();
+      if (existing.length > 0) {
+        const choice = confirm(
+          `Je hebt ${existing.length} bestaande kaart(en).\n\n` +
+          `OK = Samenvoegen (bestaande behouden + nieuwe toevoegen)\n` +
+          `Annuleren = Vervangen (alles overschrijven)`
+        );
+
+        if (choice) {
+          // Merge: add only cards with new barcodeNumbers
+          const existingBarcodes = new Set(existing.map(c => c.barcodeNumber));
+          let added = 0;
+          validCards.forEach(card => {
+            if (!existingBarcodes.has(card.barcodeNumber)) {
+              card.id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+              existing.push(card);
+              added++;
+            }
+          });
+          saveCards(existing);
+          showToast(`${added} nieuwe kaart(en) toegevoegd!`);
+        } else {
+          // Replace: ensure all cards have IDs
+          validCards.forEach(card => {
+            if (!card.id) card.id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+          });
+          saveCards(validCards);
+          showToast(`${validCards.length} kaart(en) geïmporteerd!`);
+        }
+      } else {
+        // No existing cards, just import
+        validCards.forEach(card => {
+          if (!card.id) card.id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+        });
+        saveCards(validCards);
+        showToast(`${validCards.length} kaart(en) geïmporteerd!`);
+      }
+
+      renderCards();
+    } catch {
+      showToast('Fout bij lezen van bestand');
+    }
+  };
+  reader.readAsText(file);
+
+  // Reset file input so same file can be selected again
+  importFileInput.value = '';
+});
 
 // ============================================================
 // Service Worker Registration
