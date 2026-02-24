@@ -156,6 +156,8 @@ const categoryPicker = document.getElementById('categoryPicker');
 const detailCategory = document.getElementById('detailCategory');
 const detailColorPicker = document.getElementById('detailColorPicker');
 const detailStoreLogo = document.getElementById('detailStoreLogo');
+const editNameBtn = document.getElementById('editNameBtn');
+const editNameInput = document.getElementById('editNameInput');
 
 let selectedColor = '#6C63FF';
 let selectedCategory = 'overig';
@@ -202,6 +204,15 @@ function updateCardColor(id, newColor) {
   const card = cards.find(c => c.id === id);
   if (card) {
     card.color = newColor;
+    saveCards(cards);
+  }
+}
+
+function updateCardName(id, newName) {
+  const cards = getCards();
+  const card = cards.find(c => c.id === id);
+  if (card) {
+    card.storeName = newName;
     saveCards(cards);
   }
 }
@@ -399,6 +410,11 @@ function openDetail(id) {
   detailStoreName.textContent = card.storeName;
   detailNumber.textContent = card.barcodeNumber;
 
+  // Reset edit mode
+  detailStoreName.classList.remove('hidden');
+  editNameBtn.classList.remove('hidden');
+  editNameInput.classList.add('hidden');
+
   // Show store logo
   const logoUrl = getLogoUrl(card.storeName);
   if (logoUrl) {
@@ -451,6 +467,56 @@ function closeDetailModalFn() {
 closeDetailModal.addEventListener('click', closeDetailModalFn);
 detailModal.addEventListener('click', (e) => {
   if (e.target === detailModal) closeDetailModalFn();
+});
+
+// Edit store name
+editNameBtn.addEventListener('click', () => {
+  // Switch to edit mode
+  detailStoreName.classList.add('hidden');
+  editNameBtn.classList.add('hidden');
+  editNameInput.classList.remove('hidden');
+  editNameInput.value = detailStoreName.textContent;
+  editNameInput.focus();
+  editNameInput.select();
+});
+
+function saveNameEdit() {
+  const newName = editNameInput.value.trim();
+  if (newName && currentDetailId) {
+    updateCardName(currentDetailId, newName);
+    detailStoreName.textContent = newName;
+
+    // Update logo
+    const logoUrl = getLogoUrl(newName);
+    if (logoUrl) {
+      detailStoreLogo.innerHTML = `<img src="${logoUrl}" alt="${escapeHtml(newName)}" onerror="this.parentElement.innerHTML=''"/>`;
+    } else {
+      detailStoreLogo.innerHTML = '';
+    }
+
+    renderCards();
+    showToast('Naam gewijzigd!');
+  }
+  // Switch back to display mode
+  detailStoreName.classList.remove('hidden');
+  editNameBtn.classList.remove('hidden');
+  editNameInput.classList.add('hidden');
+}
+
+editNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveNameEdit();
+  }
+  if (e.key === 'Escape') {
+    detailStoreName.classList.remove('hidden');
+    editNameBtn.classList.remove('hidden');
+    editNameInput.classList.add('hidden');
+  }
+});
+
+editNameInput.addEventListener('blur', () => {
+  saveNameEdit();
 });
 
 // Detail color picker
