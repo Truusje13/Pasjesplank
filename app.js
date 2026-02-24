@@ -365,7 +365,25 @@ deleteCardBtn.addEventListener('click', () => {
 // Barcode Scanner
 // ============================================================
 
+// Validate EAN check digit (works for EAN-8 and EAN-13)
+function isValidEAN(code) {
+  if (!/^\d{8}$|^\d{13}$/.test(code)) return false;
+  const digits = code.split('').map(Number);
+  const check = digits.pop();
+  const sum = digits.reduce((acc, d, i) => {
+    const weight = code.length === 9 // original length 8+1
+      ? (i % 2 === 0 ? 3 : 1)
+      : (i % 2 === 0 ? 1 : 3);
+    return acc + d * weight;
+  }, 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+let scanBuffer = [];
+const SCAN_CONFIRM_COUNT = 3; // require 3 identical reads
+
 function openScanner() {
+  scanBuffer = [];
   scannerOverlay.classList.add('active');
 
   Quagga.init({
@@ -395,9 +413,30 @@ function openScanner() {
   });
 
   Quagga.onDetected((result) => {
-    if (result && result.codeResult && result.codeResult.code) {
-      const code = result.codeResult.code;
+    if (!result || !result.codeResult) return;
+
+    const code = result.codeResult.code;
+    const errors = result.codeResult.decodedCodes
+      ?.filter(d => d.error != null)
+      .map(d => d.error) || [];
+    const avgError = errors.length > 0
+      ? errors.reduce((a, b) => a + b, 0) / errors.length
+      : 1;
+
+    // Skip low-confidence results (lower error = better)
+    if (avgError > 0.25) return;
+
+    // Skip invalid EAN check digits
+    if (!isValidEAN(code)) return;
+
+    // Require multiple identical reads
+    scanBuffer.push(code);
+    if (scanBuffer.length > 10) scanBuffer.shift();
+
+    const recent = scanBuffer.slice(-SCAN_CONFIRM_COUNT);
+    if (recent.length === SCAN_CONFIRM_COUNT && recent.every(c => c === code)) {
       barcodeNumberInput.value = code;
+      if (navigator.vibrate) navigator.vibrate(100);
       closeScanner();
       showToast('Barcode gescand: ' + code);
     }
