@@ -19,6 +19,104 @@ const CATEGORIES = {
 const CATEGORY_ORDER = ['supermarkt', 'kleding', 'drogisterij', 'wonen', 'overig'];
 
 // ============================================================
+// Store Logo Mapping (name → domain for logo lookup)
+// ============================================================
+
+const STORE_DOMAINS = {
+  // Supermarkten
+  'albert heijn': 'ah.nl',
+  'ah': 'ah.nl',
+  'jumbo': 'jumbo.com',
+  'lidl': 'lidl.nl',
+  'aldi': 'aldi.nl',
+  'plus': 'plus.nl',
+  'dirk': 'dirk.nl',
+  'dekamarkt': 'dekamarkt.nl',
+  'hoogvliet': 'hoogvliet.com',
+  'vomar': 'vomar.nl',
+  'spar': 'spar.nl',
+  'coop': 'coop.nl',
+  'nettorama': 'nettorama.nl',
+  'picnic': 'picnic.app',
+  'boni': 'bfrieslanddiscount.nl',
+
+  // Drogisterij
+  'kruidvat': 'kruidvat.nl',
+  'etos': 'etos.nl',
+  'trekpleister': 'trekpleister.nl',
+  'da': 'da.nl',
+  'douglas': 'douglas.nl',
+  'rituals': 'rituals.com',
+  'ici paris': 'iciparisxl.nl',
+  'ici paris xl': 'iciparisxl.nl',
+
+  // Kleding
+  'h&m': 'hm.com',
+  'zara': 'zara.com',
+  'primark': 'primark.com',
+  'c&a': 'c-and-a.com',
+  'zeeman': 'zeeman.com',
+  'wibra': 'wibra.nl',
+  'only': 'only.com',
+  'vero moda': 'veromoda.com',
+  'we fashion': 'wefashion.com',
+  'scotch & soda': 'scotchandsoda.com',
+  'nike': 'nike.com',
+  'adidas': 'adidas.nl',
+  'decathlon': 'decathlon.nl',
+  'bristol': 'bristol.nl',
+  'van haren': 'vanharen.nl',
+  'nelson': 'nelson.nl',
+
+  // Wonen & Bouwmarkt
+  'ikea': 'ikea.com',
+  'action': 'action.nl',
+  'hema': 'hema.nl',
+  'blokker': 'blokker.nl',
+  'xenos': 'xenos.nl',
+  'jysk': 'jysk.nl',
+  'kwantum': 'kwantum.nl',
+  'gamma': 'gamma.nl',
+  'praxis': 'praxis.nl',
+  'karwei': 'karwei.nl',
+  'hornbach': 'hornbach.nl',
+  'mediamarkt': 'mediamarkt.nl',
+  'coolblue': 'coolblue.nl',
+  'bol.com': 'bol.com',
+  'bol': 'bol.com',
+  'intratuin': 'intratuin.nl',
+
+  // Overig
+  'de bijenkorf': 'debijenkorf.nl',
+  'bijenkorf': 'debijenkorf.nl',
+  'pets place': 'petsplace.nl',
+  'bruna': 'bruna.nl',
+  'pearle': 'pearle.nl',
+  'hans anders': 'hansanders.nl',
+  'specsavers': 'specsavers.nl',
+  'holland & barrett': 'hollandandbarrett.nl',
+  'flying tiger': 'flyingtiger.com',
+  'sostrene grene': 'sostrenegrene.com',
+  'normal': 'normal.dk',
+  'nøormal': 'normal.dk',
+};
+
+function getLogoUrl(storeName) {
+  const name = storeName.toLowerCase().trim();
+  // Exact match
+  if (STORE_DOMAINS[name]) {
+    return 'https://logo.clearbit.com/' + STORE_DOMAINS[name];
+  }
+  // Partial match (e.g., "Albert Heijn Stadskanaal" → "ah.nl")
+  for (const [key, domain] of Object.entries(STORE_DOMAINS)) {
+    if (name.includes(key) || key.includes(name)) {
+      return 'https://logo.clearbit.com/' + domain;
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // Splash Screen
 // ============================================================
 
@@ -57,6 +155,7 @@ const filterBar = document.getElementById('filterBar');
 const categoryPicker = document.getElementById('categoryPicker');
 const detailCategory = document.getElementById('detailCategory');
 const detailColorPicker = document.getElementById('detailColorPicker');
+const detailStoreLogo = document.getElementById('detailStoreLogo');
 
 let selectedColor = '#6C63FF';
 let selectedCategory = 'overig';
@@ -169,13 +268,21 @@ function renderCards() {
 }
 
 function renderCardHtml(card, cat) {
+  const logoUrl = getLogoUrl(card.storeName);
+  const iconHtml = logoUrl
+    ? `<div class="card-store-icon has-logo" style="background: ${card.color}">
+        <img src="${logoUrl}" alt="" class="store-logo"
+          onerror="this.parentElement.classList.remove('has-logo');this.parentElement.textContent='${card.storeName.charAt(0)}';"/>
+      </div>`
+    : `<div class="card-store-icon" style="background: ${card.color}">
+        ${card.storeName.charAt(0)}
+      </div>`;
+
   return `
     <div class="loyalty-card" data-id="${card.id}">
       <div class="card-color-bar" style="background: ${card.color}"></div>
       <div class="card-body">
-        <div class="card-store-icon" style="background: ${card.color}">
-          ${card.storeName.charAt(0)}
-        </div>
+        ${iconHtml}
         <div class="card-info">
           <div class="card-store-name">${escapeHtml(card.storeName)}</div>
           <div class="card-category-badge">
@@ -291,6 +398,14 @@ function openDetail(id) {
   currentDetailId = id;
   detailStoreName.textContent = card.storeName;
   detailNumber.textContent = card.barcodeNumber;
+
+  // Show store logo
+  const logoUrl = getLogoUrl(card.storeName);
+  if (logoUrl) {
+    detailStoreLogo.innerHTML = `<img src="${logoUrl}" alt="${escapeHtml(card.storeName)}" onerror="this.parentElement.innerHTML=''"/>`;
+  } else {
+    detailStoreLogo.innerHTML = '';
+  }
 
   // Show category
   const cardCat = CATEGORIES[card.category || 'overig'];
