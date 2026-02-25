@@ -546,116 +546,166 @@ deleteCardBtn.addEventListener('click', () => {
 });
 
 // ============================================================
-// Barcode Scanner
+// Barcode Scanner (native BarcodeDetector with Quagga fallback)
 // ============================================================
 
-// Validate EAN check digit (works for EAN-8 and EAN-13)
-function isValidEAN(code) {
-  if (!/^\d{8}$|^\d{13}$/.test(code)) return false;
-  const digits = code.split('').map(Number);
-  const check = digits.pop();
-  const sum = digits.reduce((acc, d, i) => {
-    const weight = code.length === 8
-      ? (i % 2 === 0 ? 3 : 1)
-      : (i % 2 === 0 ? 1 : 3);
-    return acc + d * weight;
-  }, 0);
-  return (10 - (sum % 10)) % 10 === check;
-}
+let scannerStream = null;
+let scannerAnimFrame = null;
+const hasNativeDetector = ('BarcodeDetector' in window);
 
-let scanBuffer = [];
-const SCAN_CONFIRM_COUNT = 3; // require 3 identical reads
-
-function openScanner() {
-  scanBuffer = [];
+async function openScanner() {
   scannerOverlay.classList.add('active');
 
-  Quagga.init({
-    inputStream: {
-      name: 'Live',
-      type: 'LiveStream',
-      target: scannerViewport,
-      constraints: {
-        facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+  try {
+    // Open camera directly
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+
+    // Create a video element
+    const video = document.createElement('video');
+    video.setAttribute('autoplay', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'cover';
+
+    // Keep the scanner guide
+    const guide = scannerViewport.querySelector('.scanner-guide');
+    scannerViewport.innerHTML = '';
+    scannerViewport.appendChild(video);
+    if (guide) scannerViewport.appendChild(guide);
+
+    video.srcObject = scannerStream;
+    await video.play();
+
+    if (hasNativeDetector) {
+      // Use native BarcodeDetector (fast & accurate)
+      const detector = new BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'codabar', 'qr_code']
+      });
+      scanNative(video, detector);
+    } else {
+      // Fallback: use Quagga on video frames
+      scanWithQuagga(video);
+    }
+
+  } catch (err) {
+    console.error('Camera error:', err);
+    closeScanner();
+    if (err.name === 'NotAllowedError') {
+      showToast('Geef cameratoestemming via het slotje naast de URL');
+    } else {
+      showToast('Camera kon niet geopend worden');
+    }
+  }
+}
+
+function scanNative(video, detector) {
+  let lastCode = '';
+  let confirmCount = 0;
+
+  function detect() {
+    if (!scannerStream) return;
+
+    detector.detect(video).then(barcodes => {
+      if (barcodes.length > 0) {
+        const code = barcodes[0].rawValue;
+        if (code === lastCode) {
+          confirmCount++;
+        } else {
+          lastCode = code;
+          confirmCount = 1;
+        }
+
+        // Accept after 2 identical reads
+        if (confirmCount >= 2) {
+          barcodeNumberInput.value = code;
+          if (navigator.vibrate) navigator.vibrate(100);
+          closeScanner();
+          showToast('Barcode gescand: ' + code);
+          return;
+        }
       }
-    },
-    decoder: {
-      readers: [
-        'ean_reader',
-        'ean_8_reader',
-        'code_128_reader'
-      ]
-    },
-    locate: true,
-    frequency: 10
-  }, (err) => {
-    if (err) {
-      console.error('Quagga init error:', err);
-      closeScanner();
-      // Toon de echte fout zodat we kunnen debuggen
-      const errMsg = err.message || err.name || String(err);
-      showToast('Fout: ' + errMsg);
-      return;
-    }
-    Quagga.start();
-  });
+      scannerAnimFrame = requestAnimationFrame(detect);
+    }).catch(() => {
+      scannerAnimFrame = requestAnimationFrame(detect);
+    });
+  }
 
-  Quagga.onDetected((result) => {
-    if (!result || !result.codeResult) return;
+  scannerAnimFrame = requestAnimationFrame(detect);
+}
 
-    const code = result.codeResult.code;
-    const format = result.codeResult.format;
+function scanWithQuagga(video) {
+  // Use Quagga to decode from canvas frames
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  let scanBuffer = [];
 
-    // For EAN formats: validate check digit
-    if ((format === 'ean_reader' || format === 'ean_8_reader') && !isValidEAN(code)) {
+  function detect() {
+    if (!scannerStream) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    if (canvas.width === 0) {
+      scannerAnimFrame = requestAnimationFrame(detect);
       return;
     }
 
-    // Check confidence via error rate
-    const errors = result.codeResult.decodedCodes
-      ?.filter(d => d.error != null)
-      .map(d => d.error) || [];
-    const avgError = errors.length > 0
-      ? errors.reduce((a, b) => a + b, 0) / errors.length
-      : 1;
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.toImageData
+      ? ctx.toImageData()
+      : ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Skip low-confidence results (lower error = better)
-    if (avgError > 0.3) return;
+    Quagga.decodeSingle({
+      src: canvas.toDataURL('image/jpeg'),
+      numOfWorkers: 0,
+      decoder: {
+        readers: ['ean_reader', 'ean_8_reader', 'code_128_reader']
+      },
+      locate: true
+    }, (result) => {
+      if (result && result.codeResult && result.codeResult.code) {
+        const code = result.codeResult.code;
+        scanBuffer.push(code);
+        if (scanBuffer.length > 10) scanBuffer.shift();
 
-    // Require multiple identical reads for confirmation
-    scanBuffer.push(code);
-    if (scanBuffer.length > 15) scanBuffer.shift();
+        const recent = scanBuffer.slice(-3);
+        if (recent.length === 3 && recent.every(c => c === code)) {
+          barcodeNumberInput.value = code;
+          if (navigator.vibrate) navigator.vibrate(100);
+          closeScanner();
+          showToast('Barcode gescand: ' + code);
+          return;
+        }
+      }
+      // Scan every 500ms to avoid overloading
+      setTimeout(() => {
+        scannerAnimFrame = requestAnimationFrame(detect);
+      }, 500);
+    });
+  }
 
-    const recent = scanBuffer.slice(-SCAN_CONFIRM_COUNT);
-    if (recent.length === SCAN_CONFIRM_COUNT && recent.every(c => c === code)) {
-      barcodeNumberInput.value = code;
-      if (navigator.vibrate) navigator.vibrate(100);
-      closeScanner();
-      showToast('Barcode gescand: ' + code);
-    }
-  });
+  scannerAnimFrame = requestAnimationFrame(detect);
 }
 
 function closeScanner() {
-  try {
-    Quagga.stop();
-    Quagga.offDetected();
-  } catch {
-    // Scanner may not have been initialized
+  // Stop animation loop
+  if (scannerAnimFrame) {
+    cancelAnimationFrame(scannerAnimFrame);
+    scannerAnimFrame = null;
   }
+
+  // Stop camera stream
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(t => t.stop());
+    scannerStream = null;
+  }
+
   scannerOverlay.classList.remove('active');
 
-  // Clean up video elements
-  const videos = scannerViewport.querySelectorAll('video');
-  videos.forEach(v => {
-    if (v.srcObject) {
-      v.srcObject.getTracks().forEach(t => t.stop());
-    }
-  });
-
-  // Remove Quagga-generated elements but keep the guide
+  // Clean up viewport
   const guide = scannerViewport.querySelector('.scanner-guide');
   scannerViewport.innerHTML = '';
   if (guide) scannerViewport.appendChild(guide);
