@@ -103,17 +103,25 @@ const STORE_DOMAINS = {
 
 function getLogoUrl(storeName) {
   const name = storeName.toLowerCase().trim();
+  let domain = null;
+
   // Exact match
   if (STORE_DOMAINS[name]) {
-    return 'https://logo.clearbit.com/' + STORE_DOMAINS[name];
-  }
-  // Partial match (e.g., "Albert Heijn Stadskanaal" → "ah.nl")
-  for (const [key, domain] of Object.entries(STORE_DOMAINS)) {
-    if (name.includes(key) || key.includes(name)) {
-      return 'https://logo.clearbit.com/' + domain;
+    domain = STORE_DOMAINS[name];
+  } else {
+    // Partial match (e.g., "Albert Heijn Stadskanaal" → "ah.nl")
+    for (const [key, d] of Object.entries(STORE_DOMAINS)) {
+      if (name.includes(key) || key.includes(name)) {
+        domain = d;
+        break;
+      }
     }
   }
-  return null;
+
+  if (!domain) return null;
+
+  // Google Favicon API — reliable and free
+  return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=128';
 }
 
 // ============================================================
