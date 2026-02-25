@@ -566,10 +566,32 @@ function isValidEAN(code) {
 let scanBuffer = [];
 const SCAN_CONFIRM_COUNT = 3; // require 3 identical reads
 
-function openScanner() {
+async function openScanner() {
   scanBuffer = [];
-  scannerOverlay.classList.add('active');
 
+  // Step 1: Request camera permission explicitly first
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+    // Stop the test stream — Quagga will open its own
+    stream.getTracks().forEach(t => t.stop());
+  } catch (err) {
+    console.error('Camera permission error:', err);
+    if (err.name === 'NotAllowedError') {
+      showToast('Geef eerst cameratoestemming in je browserinstellingen');
+    } else {
+      showToast('Camera niet beschikbaar op dit apparaat');
+    }
+    return;
+  }
+
+  // Step 2: Show scanner overlay and wait for it to render
+  scannerOverlay.classList.add('active');
+  await new Promise(r => setTimeout(r, 100));
+
+  // Step 3: Initialize Quagga
   Quagga.init({
     inputStream: {
       name: 'Live',
@@ -595,9 +617,9 @@ function openScanner() {
     frequency: 10
   }, (err) => {
     if (err) {
-      console.error('Scanner error:', err);
+      console.error('Quagga init error:', err);
       closeScanner();
-      showToast('Camera niet beschikbaar');
+      showToast('Scanner kon niet starten, probeer opnieuw');
       return;
     }
     Quagga.start();

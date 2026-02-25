@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasjesplank-v11';
+const CACHE_NAME = 'pasjesplank-v12';
 const ASSETS = [
   './',
   './index.html',
