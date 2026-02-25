@@ -576,17 +576,16 @@ function openScanner() {
       type: 'LiveStream',
       target: scannerViewport,
       constraints: {
-        facingMode: 'environment'
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
     },
     decoder: {
       readers: [
         'ean_reader',
         'ean_8_reader',
-        'code_128_reader',
-        'code_39_reader',
-        'itf_reader',
-        'codabar_reader'
+        'code_128_reader'
       ]
     },
     locate: true,
@@ -595,7 +594,9 @@ function openScanner() {
     if (err) {
       console.error('Quagga init error:', err);
       closeScanner();
-      showToast('Camera niet beschikbaar');
+      // Toon de echte fout zodat we kunnen debuggen
+      const errMsg = err.message || err.name || String(err);
+      showToast('Fout: ' + errMsg);
       return;
     }
     Quagga.start();
