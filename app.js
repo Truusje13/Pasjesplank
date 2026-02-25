@@ -87,6 +87,8 @@ const STORE_DOMAINS = {
   'intratuin': 'intratuin.nl',
 
   // Overig
+  'airmiles': 'airmiles.nl',
+  'air miles': 'airmiles.nl',
   'de bijenkorf': 'debijenkorf.nl',
   'bijenkorf': 'debijenkorf.nl',
   'pets place': 'petsplace.nl',
