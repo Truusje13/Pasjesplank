@@ -437,28 +437,26 @@ function openDetail(id) {
     btn.classList.toggle('selected', btn.dataset.color === card.color);
   });
 
-  // Render barcode
-  try {
-    JsBarcode(detailBarcode, card.barcodeNumber, {
-      format: 'EAN13',
-      width: 2,
-      height: 80,
-      displayValue: false,
-      margin: 10
-    });
-  } catch {
-    // Fallback: try CODE128 if EAN fails
+  // Render barcode — try formats in order of likelihood
+  const barcodeFormats = ['EAN13', 'EAN8', 'CODE128', 'CODE39', 'ITF', 'codabar'];
+  let barcodeRendered = false;
+  for (const fmt of barcodeFormats) {
     try {
       JsBarcode(detailBarcode, card.barcodeNumber, {
-        format: 'CODE128',
+        format: fmt,
         width: 2,
         height: 80,
         displayValue: false,
         margin: 10
       });
+      barcodeRendered = true;
+      break;
     } catch {
-      detailBarcode.innerHTML = '';
+      // Try next format
     }
+  }
+  if (!barcodeRendered) {
+    detailBarcode.innerHTML = '';
   }
 
   detailModal.classList.add('active');
@@ -557,7 +555,7 @@ function isValidEAN(code) {
   const digits = code.split('').map(Number);
   const check = digits.pop();
   const sum = digits.reduce((acc, d, i) => {
-    const weight = code.length === 9 // original length 8+1
+    const weight = code.length === 8
       ? (i % 2 === 0 ? 3 : 1)
       : (i % 2 === 0 ? 1 : 3);
     return acc + d * weight;
@@ -584,7 +582,14 @@ function openScanner() {
       }
     },
     decoder: {
-      readers: ['ean_reader', 'ean_8_reader']
+      readers: [
+        'ean_reader',
+        'ean_8_reader',
+        'code_128_reader',
+        'code_39_reader',
+        'itf_reader',
+        'codabar_reader'
+      ]
     },
     locate: true,
     frequency: 10
@@ -602,6 +607,14 @@ function openScanner() {
     if (!result || !result.codeResult) return;
 
     const code = result.codeResult.code;
+    const format = result.codeResult.format;
+
+    // For EAN formats: validate check digit
+    if ((format === 'ean_reader' || format === 'ean_8_reader') && !isValidEAN(code)) {
+      return;
+    }
+
+    // Check confidence via error rate
     const errors = result.codeResult.decodedCodes
       ?.filter(d => d.error != null)
       .map(d => d.error) || [];
@@ -610,14 +623,11 @@ function openScanner() {
       : 1;
 
     // Skip low-confidence results (lower error = better)
-    if (avgError > 0.25) return;
+    if (avgError > 0.3) return;
 
-    // Skip invalid EAN check digits
-    if (!isValidEAN(code)) return;
-
-    // Require multiple identical reads
+    // Require multiple identical reads for confirmation
     scanBuffer.push(code);
-    if (scanBuffer.length > 10) scanBuffer.shift();
+    if (scanBuffer.length > 15) scanBuffer.shift();
 
     const recent = scanBuffer.slice(-SCAN_CONFIRM_COUNT);
     if (recent.length === SCAN_CONFIRM_COUNT && recent.every(c => c === code)) {
