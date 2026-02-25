@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasjesplank-v17';
+const CACHE_NAME = 'pasjesplank-v18';
 const ASSETS = [
   './',
   './index.html',
@@ -28,15 +28,20 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for own files, cache-first for CDN
+// Fetch: network-first for own files, cache-first for CDN libraries only
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // CDN resources (libraries) → cache-first (they don't change)
-  if (url.origin !== self.location.origin) {
+  // CDN libraries (jsdelivr) → cache-first (they never change)
+  if (url.hostname === 'cdn.jsdelivr.net') {
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
+    return;
+  }
+
+  // Other external requests (logo's, etc.) → let browser handle normally
+  if (url.origin !== self.location.origin) {
     return;
   }
 

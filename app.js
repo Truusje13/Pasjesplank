@@ -120,8 +120,8 @@ function getLogoUrl(storeName) {
 
   if (!domain) return null;
 
-  // Google Favicon API — reliable and free
-  return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=128';
+  // Google Favicon V2 API — direct URL, no redirect
+  return 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://' + domain + '&size=128';
 }
 
 // ============================================================
