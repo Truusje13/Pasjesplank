@@ -67,6 +67,10 @@ const STORE_DOMAINS = {
   'bristol': 'bristol.nl',
   'van haren': 'vanharen.nl',
   'nelson': 'nelson.nl',
+  'ziengs': 'ziengs.nl',
+  'peek & cloppenburg': 'peek-cloppenburg.nl',
+  'peek en cloppenburg': 'peek-cloppenburg.nl',
+  'p&c': 'peek-cloppenburg.nl',
 
   // Wonen & Bouwmarkt
   'ikea': 'ikea.com',
