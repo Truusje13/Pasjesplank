@@ -566,99 +566,91 @@ function isValidEAN(code) {
 let scanBuffer = [];
 const SCAN_CONFIRM_COUNT = 3; // require 3 identical reads
 
-async function openScanner() {
+function openScanner() {
   scanBuffer = [];
 
-  // Step 1: Request camera permission explicitly first
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
-    });
-    // Stop the test stream — Quagga will open its own
-    stream.getTracks().forEach(t => t.stop());
-  } catch (err) {
-    console.error('Camera permission error:', err);
-    if (err.name === 'NotAllowedError') {
-      showToast('Geef eerst cameratoestemming in je browserinstellingen');
-    } else {
-      showToast('Camera niet beschikbaar op dit apparaat');
-    }
-    return;
-  }
-
-  // Step 2: Show scanner overlay and wait for it to render
+  // Show scanner overlay first so the viewport is in the DOM
   scannerOverlay.classList.add('active');
-  await new Promise(r => setTimeout(r, 100));
 
-  // Step 3: Initialize Quagga
-  Quagga.init({
-    inputStream: {
-      name: 'Live',
-      type: 'LiveStream',
-      target: scannerViewport,
-      constraints: {
-        facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+  // Small delay to ensure viewport is rendered before Quagga attaches
+  setTimeout(() => {
+    Quagga.init({
+      inputStream: {
+        name: 'Live',
+        type: 'LiveStream',
+        target: scannerViewport,
+        constraints: {
+          facingMode: { ideal: 'environment' },
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 }
+        }
+      },
+      decoder: {
+        readers: [
+          'ean_reader',
+          'ean_8_reader',
+          'code_128_reader',
+          'code_39_reader',
+          'itf_reader',
+          'codabar_reader'
+        ]
+      },
+      locate: true,
+      frequency: 10
+    }, (err) => {
+      if (err) {
+        console.error('Quagga init error:', err);
+        closeScanner();
+
+        // Give helpful error message
+        const msg = err.name || err.message || String(err);
+        if (msg.includes('NotAllowed') || msg.includes('Permission')) {
+          showToast('Geef cameratoestemming via het slotje in de adresbalk');
+        } else if (msg.includes('NotFound') || msg.includes('Requested device not found')) {
+          showToast('Geen camera gevonden op dit apparaat');
+        } else {
+          showToast('Camera kon niet starten. Sluit andere apps die de camera gebruiken.');
+        }
+        return;
       }
-    },
-    decoder: {
-      readers: [
-        'ean_reader',
-        'ean_8_reader',
-        'code_128_reader',
-        'code_39_reader',
-        'itf_reader',
-        'codabar_reader'
-      ]
-    },
-    locate: true,
-    frequency: 10
-  }, (err) => {
-    if (err) {
-      console.error('Quagga init error:', err);
-      closeScanner();
-      showToast('Scanner kon niet starten, probeer opnieuw');
-      return;
-    }
-    Quagga.start();
-  });
+      Quagga.start();
+    });
 
-  Quagga.onDetected((result) => {
-    if (!result || !result.codeResult) return;
+    Quagga.onDetected((result) => {
+      if (!result || !result.codeResult) return;
 
-    const code = result.codeResult.code;
-    const format = result.codeResult.format;
+      const code = result.codeResult.code;
+      const format = result.codeResult.format;
 
-    // For EAN formats: validate check digit
-    if ((format === 'ean_reader' || format === 'ean_8_reader') && !isValidEAN(code)) {
-      return;
-    }
+      // For EAN formats: validate check digit
+      if ((format === 'ean_reader' || format === 'ean_8_reader') && !isValidEAN(code)) {
+        return;
+      }
 
-    // Check confidence via error rate
-    const errors = result.codeResult.decodedCodes
-      ?.filter(d => d.error != null)
-      .map(d => d.error) || [];
-    const avgError = errors.length > 0
-      ? errors.reduce((a, b) => a + b, 0) / errors.length
-      : 1;
+      // Check confidence via error rate
+      const errors = result.codeResult.decodedCodes
+        ?.filter(d => d.error != null)
+        .map(d => d.error) || [];
+      const avgError = errors.length > 0
+        ? errors.reduce((a, b) => a + b, 0) / errors.length
+        : 1;
 
-    // Skip low-confidence results (lower error = better)
-    if (avgError > 0.3) return;
+      // Skip low-confidence results (lower error = better)
+      if (avgError > 0.3) return;
 
-    // Require multiple identical reads for confirmation
-    scanBuffer.push(code);
-    if (scanBuffer.length > 15) scanBuffer.shift();
+      // Require multiple identical reads for confirmation
+      scanBuffer.push(code);
+      if (scanBuffer.length > 15) scanBuffer.shift();
 
-    const recent = scanBuffer.slice(-SCAN_CONFIRM_COUNT);
-    if (recent.length === SCAN_CONFIRM_COUNT && recent.every(c => c === code)) {
-      barcodeNumberInput.value = code;
-      if (navigator.vibrate) navigator.vibrate(100);
-      closeScanner();
-      showToast('Barcode gescand: ' + code);
-    }
-  });
+      const recent = scanBuffer.slice(-SCAN_CONFIRM_COUNT);
+      if (recent.length === SCAN_CONFIRM_COUNT && recent.every(c => c === code)) {
+        barcodeNumberInput.value = code;
+        if (navigator.vibrate) navigator.vibrate(100);
+        closeScanner();
+        showToast('Barcode gescand: ' + code);
+      }
+    });
+  }, 200);
 }
 
 function closeScanner() {
