@@ -3,6 +3,7 @@
 // ============================================================
 
 const STORAGE_KEY = 'klantenkaarten';
+const BACKUP_KEY = 'klantenkaarten_backup';
 
 // ============================================================
 // Categories
@@ -189,10 +190,29 @@ let currentDetailId = null;
 
 function getCards() {
   const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+  if (data) return JSON.parse(data);
+
+  // Main storage empty — try to restore from backup
+  const backup = localStorage.getItem(BACKUP_KEY);
+  if (backup) {
+    const restored = JSON.parse(backup);
+    if (restored.length > 0) {
+      localStorage.setItem(STORAGE_KEY, backup);
+      return restored;
+    }
+  }
+  return [];
 }
 
 function saveCards(cards) {
+  // Save backup of current state before overwriting (only when there are cards)
+  const current = localStorage.getItem(STORAGE_KEY);
+  if (current) {
+    const currentCards = JSON.parse(current);
+    if (currentCards.length > 0) {
+      localStorage.setItem(BACKUP_KEY, current);
+    }
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
 }
 
@@ -1077,5 +1097,10 @@ if ('serviceWorker' in navigator) {
 // ============================================================
 // Init
 // ============================================================
+
+// Request persistent storage so the browser won't auto-clear our data
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist();
+}
 
 renderCards();
