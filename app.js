@@ -4,6 +4,8 @@
 
 const STORAGE_KEY = 'klantenkaarten';
 const BACKUP_KEY = 'klantenkaarten_backup';
+const IDB_NAME = 'PasjesPlankDB';
+const IDB_STORE = 'cards';
 
 // ============================================================
 // Categories
@@ -185,14 +187,53 @@ let activeFilter = 'all';
 let currentDetailId = null;
 
 // ============================================================
-// LocalStorage
+// IndexedDB — second storage layer (survives localStorage wipes)
+// ============================================================
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveToIDB(cards) {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(cards, 'allCards');
+    db.close();
+  } catch { /* IDB not available — localStorage still works */ }
+}
+
+async function loadFromIDB() {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get('allCards');
+      req.onsuccess = () => { db.close(); resolve(req.result || []); };
+      req.onerror = () => { db.close(); resolve([]); };
+    });
+  } catch { return []; }
+}
+
+// ============================================================
+// LocalStorage + IndexedDB (dual storage)
 // ============================================================
 
 function getCards() {
   const data = localStorage.getItem(STORAGE_KEY);
-  if (data) return JSON.parse(data);
+  if (data) {
+    const cards = JSON.parse(data);
+    if (cards.length > 0) return cards;
+  }
 
-  // Main storage empty — try to restore from backup
+  // Main storage empty — try localStorage backup
   const backup = localStorage.getItem(BACKUP_KEY);
   if (backup) {
     const restored = JSON.parse(backup);
@@ -205,7 +246,7 @@ function getCards() {
 }
 
 function saveCards(cards) {
-  // Save backup of current state before overwriting (only when there are cards)
+  // Save backup of current state before overwriting
   const current = localStorage.getItem(STORAGE_KEY);
   if (current) {
     const currentCards = JSON.parse(current);
@@ -214,6 +255,27 @@ function saveCards(cards) {
     }
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+
+  // Also save to IndexedDB (async, fire-and-forget)
+  saveToIDB(cards);
+}
+
+// Try to recover from IndexedDB if localStorage is empty
+async function tryRecoverFromIDB() {
+  const localCards = getCards();
+  if (localCards.length > 0) {
+    // localStorage is fine — sync to IDB to keep it up-to-date
+    saveToIDB(localCards);
+    return;
+  }
+
+  // localStorage is empty — check IndexedDB
+  const idbCards = await loadFromIDB();
+  if (idbCards.length > 0) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(idbCards));
+    renderCards();
+    showToast('Kaarten hersteld uit back-up!');
+  }
 }
 
 function addCard(card) {
@@ -1103,4 +1165,8 @@ if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist();
 }
 
+// First render from localStorage (instant)
 renderCards();
+
+// Then check IndexedDB in case localStorage was wiped
+tryRecoverFromIDB();
