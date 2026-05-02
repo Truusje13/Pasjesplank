@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pasjesplank-v22';
+const CACHE_NAME = 'pasjesplank-v23';
+const DATA_CACHE = 'pasjesplank-data'; // NOOIT wissen — bevat kaartbackup
 const ASSETS = [
   './',
   './index.html',
@@ -18,11 +19,15 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up old APP caches — maar NOOIT de data-cache!
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME && k !== DATA_CACHE)
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();

@@ -215,6 +215,27 @@ async function saveToIDB(cards) {
   } catch { return false; }
 }
 
+// Cache API — 4th independent storage layer
+const DATA_CACHE = 'pasjesplank-data';
+
+async function saveToDataCache(cards) {
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    await cache.put('/data/cards', new Response(JSON.stringify(cards), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch {}
+}
+
+async function loadFromDataCache() {
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    const response = await cache.match('/data/cards');
+    if (!response) return [];
+    return await response.json();
+  } catch { return []; }
+}
+
 async function loadFromIDB() {
   try {
     const db = await openIDB();
@@ -288,35 +309,40 @@ function saveCards(cards) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
   } catch { /* localStorage might be full or unavailable */ }
 
-  // Also save to IndexedDB (async, more reliable)
+  // Also save to IndexedDB + Cache API (async, independent storage layers)
   saveToIDB(cards);
+  saveToDataCache(cards);
 }
 
-// Startup: load from IndexedDB and reconcile with localStorage
+// Startup: check all storage layers and use whichever has the most cards
 async function initStorage() {
-  const localCards = getCards(); // from localStorage (sync)
-  let idbCards = [];
-  try {
-    idbCards = await loadFromIDB();
-  } catch { /* IDB unavailable */ }
+  const localCards = getCards(); // from localStorage (sync, already loaded)
 
-  // Pick whichever source has the most cards
-  if (idbCards.length > 0 && idbCards.length > localCards.length) {
-    // IDB has more data — it's more up-to-date, use it
-    _cardsCache = idbCards;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(idbCards));
-    } catch {}
+  // Load from all async sources in parallel
+  const [idbCards, cacheCards] = await Promise.all([
+    loadFromIDB(),
+    loadFromDataCache()
+  ]);
+
+  // Find the source with the most cards
+  const best = [
+    { source: 'localStorage', cards: localCards },
+    { source: 'IndexedDB',    cards: idbCards },
+    { source: 'Cache',        cards: cacheCards }
+  ].reduce((a, b) => b.cards.length > a.cards.length ? b : a);
+
+  if (best.cards.length > localCards.length) {
+    // A backup source has more cards — restore from it
+    _cardsCache = best.cards;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(best.cards)); } catch {}
     renderCards();
-    if (localCards.length === 0) {
-      showToast('Kaarten hersteld uit back-up!');
-    }
-  } else if (localCards.length > 0 && localCards.length > idbCards.length) {
-    // localStorage has more data — sync to IDB
-    saveToIDB(localCards);
-  } else if (localCards.length > 0) {
-    // Same count — sync localStorage to IDB to be safe
-    saveToIDB(localCards);
+    showToast('Kaarten hersteld uit back-up!');
+  }
+
+  // Sync the winning data to all layers (so all are in sync going forward)
+  if (best.cards.length > 0) {
+    saveToIDB(best.cards);
+    saveToDataCache(best.cards);
   }
 }
 
@@ -1172,29 +1198,34 @@ importFileInput.addEventListener('change', (e) => {
 // ============================================================
 
 if ('serviceWorker' in navigator) {
+  let updatePending = false;
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
       .then((reg) => {
-        // Check for updates every time the app opens
         reg.update();
 
-        // When a new SW is found, auto-activate and reload
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
-                // New version active — reload to show updates
-                showToast('Update beschikbaar, app wordt herladen...');
-                setTimeout(() => window.location.reload(), 1000);
+                // Mark update pending — reload safely on NEXT open, not mid-session
+                updatePending = true;
               }
             });
           }
         });
       })
-      .catch(() => {
-        // SW registration failed - app still works without it
-      });
+      .catch(() => {});
+  });
+
+  // Reload only when the user next opens the app (not during use)
+  document.addEventListener('visibilitychange', () => {
+    if (updatePending && document.visibilityState === 'visible') {
+      updatePending = false;
+      window.location.reload();
+    }
   });
 }
 
